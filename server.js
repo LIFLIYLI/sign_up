@@ -18,24 +18,75 @@ var server = http.createServer(function(request, response){
   var method = request.method
 
   /******** 从这里开始看，上面不要看 ************/
-
+console.log(path,method)
   if(path == '/'){
-    request.status=200 
+    request.status=200 //????
     response.setHeader('Content-Type', 'text/html; charset=utf-8')
-    response.setHeader("Access-Control-Allow-Origin", "*")
+    response.setHeader("Access-Control-Allow-Origin", "*")//跨域
     response.write('<!DOCTYPE>\n<html>'  + 
       '<head><link rel="stylesheet" href="/style.js">' +
       '</head><body>'  +
       '<h1>你好</h1>' +
       '<script src="/script.html"></script>' +
-      '</body></html>')
+      '</body> </html>')
     response.end()
-  }else if(path==='/sign_up'){
+  }else if(path==='/sign_up' && method==='GET'){
     let string=fs.readFileSync('./sign_up.html','utf8')//读取目录文本下的内容
-    request.status=200 
+    response.statusCode=200 
     response.setHeader('Content-Type', 'text/html; charset=utf-8')
     response.write(string)
     response.end()
+  }else if(path==='/sign_up' && method==='POST'){
+    readyBody(request).then((body)=>{
+      let strings=body.split('&')
+      let hash={}
+      strings.forEach((string)=>{
+        let parts=string.split('=')
+        key=parts[0]
+        value=parts[1]
+        hash[key]=decodeURIComponent(value)
+      })
+      let {email,password,password_confirmation}=hash
+      if(email.indexOf('@')===-1){
+        response.statusCode=400
+        response.setHeader('Content-Type', 'application/json; charset=utf-8')
+        response.write(`{
+          "errors":{
+            "email":"bad"
+          }
+        }`)
+      }else if(password !==password_confirmation){
+        response.statusCode=400
+        response.write('password is not  alike')
+      }else{
+        var users=fs.readFileSync('./db/users','utf8')
+        try{
+          users=JSON.parse(users)//如果这一步失败，就执行catch
+        }catch(exception){ 
+          users=[]
+        }
+        let inUse=false
+        for(let i=0;i<users.length;i++){
+          let user=users[i]
+          if(user.email===email){
+            inUse=true
+            break;
+          }
+        }  
+        if(inUse){
+          response.statusCode=400
+          response.write('email in use')
+        }else{
+          users.push({email:email,password:password})
+          var usersString=JSON.stringify(users)
+          fs.writeFileSync('./db/users',usersString)     
+          response.statusCode===200
+        }       
+      }
+      response.end()
+    })
+   
+    
   }else{
     response.statusCode = 404
     response.end()
@@ -46,7 +97,18 @@ var server = http.createServer(function(request, response){
 
   /******** 代码结束，下面不要看 ************/
 })
-
+function readyBody(request){
+  return new Promise((resolve,reject)=>{
+    let body=[]   //请求体
+    request.on('data',(chunk)=>{//POST每次上传只有一小部分，所以把没部分chunk都PUSH进body
+      body.push(chunk)
+    }).on('end',()=>{//监听PUSH事件结束后
+      body=Buffer.concat(body).toString()//转换body的格式
+      resolve(body)
+    })
+  })
+  
+}
 server.listen(port)
 console.log('监听 ' + port + ' 成功\n请用在空中转体720度然后用电饭煲打开 http://localhost:' + port)
 
