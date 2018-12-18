@@ -20,16 +20,36 @@ var server = http.createServer(function(request, response){
   /******** 从这里开始看，上面不要看 ************/
 console.log(path,method)
   if(path == '/'){
+    let string=fs.readFileSync('./index.html','utf8')
+    let cookies= request.headers.cookie.split('; ')
+    let hash={}
+    for(let i=0;i<cookies.length;i++){
+      let parts=cookies[i].split('=')
+      let key=parts[0]
+      let value=parts[1]
+      hash[key]=value
+    }
+    let email=hash.sign_in_email
+    let users=fs.readFileSync('./db/users','utf8')
+    users=JSON.parse(users)
+    let foundUser
+    for(let i=0;i<users.length;i++){
+      if(users[i].email===email){
+        foundUser=users[i]
+        break
+      }
+    }
+    if(foundUser){
+      string=string.replace('__user__',foundUser.email)
+    }else{
+      string=string.replace('__user__','错误信息')
+    }
     request.status=200 //????
     response.setHeader('Content-Type', 'text/html; charset=utf-8')
     response.setHeader("Access-Control-Allow-Origin", "*")//跨域
-    response.write('<!DOCTYPE>\n<html>'  + 
-      '<head><link rel="stylesheet" href="/style.js">' +
-      '</head><body>'  +
-      '<h1>你好</h1>' +
-      '<script src="/script.html"></script>' +
-      '</body> </html>')
+    response.write(string)
     response.end()
+
   }else if(path==='/sign_up' && method==='GET'){
     let string=fs.readFileSync('./sign_up.html','utf8')//读取目录文本下的内容
     response.statusCode=200 
@@ -58,6 +78,7 @@ console.log(path,method)
       }else if(password !==password_confirmation){
         response.statusCode=400
         response.write('password is not  alike')
+        
       }else{
         var users=fs.readFileSync('./db/users','utf8')
         try{
@@ -87,7 +108,50 @@ console.log(path,method)
     })
    
     
-  }else{
+  }
+
+  else if(path==='/sign_in' && method==='GET'){
+    let string=fs.readFileSync('./sign_in.html','utf8')//读取目录文本下的内容
+    response.statusCode=200 
+    response.setHeader('Content-Type', 'text/html; charset=utf-8')
+    response.write(string)
+    response.end()
+  }else if(path==='/sign_in' && method==='POST'){
+    readyBody(request).then((body)=>{
+      let strings=body.split('&')
+      let hash={}
+      strings.forEach((string)=>{
+        let parts=string.split('=')
+        key=parts[0]
+        value=parts[1]
+        hash[key]=decodeURIComponent(value)
+      })
+      let {email,password}=hash
+      var users=fs.readFileSync('./db/users','utf8')
+      try{
+        users=JSON.parse(users)
+      }catch(exception){
+        users=[]
+      }
+      let found
+      for(let i=0;i<users.length;i++){
+        if(users[i].email===email&&users[i].password===password){
+          found=true
+          break
+        }
+      }
+      if(found){
+        response.setHeader('Set-Cookie',`sign_in_email=${email};httpOnly`)
+        response.statusCode=200
+      }else{
+        response.statusCode=400
+      }
+      response.end()
+    })
+
+  }
+  
+  else{
     response.statusCode = 404
     response.end()
   }
