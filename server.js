@@ -8,6 +8,8 @@ if(!port){
   process.exit(1)
 }
 
+let sessions={}
+
 var server = http.createServer(function(request, response){
   var parsedUrl = url.parse(request.url, true)
   var path = request.url 
@@ -21,7 +23,11 @@ var server = http.createServer(function(request, response){
 console.log(path,method)
   if(path == '/'){
     let string=fs.readFileSync('./index.html','utf8')
-    let cookies= request.headers.cookie.split('; ')
+    let cookies=''
+    if(request.headers.cookie){
+      cookies= request.headers.cookie.split('; ')
+    }
+    
     let hash={}
     for(let i=0;i<cookies.length;i++){
       let parts=cookies[i].split('=')
@@ -29,7 +35,11 @@ console.log(path,method)
       let value=parts[1]
       hash[key]=value
     }
-    let email=hash.sign_in_email
+    let mySession=sessions[hash.sessionId]//用内存存起来，不然缓存会被删除
+    let email
+    if(mySession){
+      email=mySession.sign_in_email
+    }
     let users=fs.readFileSync('./db/users','utf8')
     users=JSON.parse(users)
     let foundUser
@@ -41,8 +51,10 @@ console.log(path,method)
     }
     if(foundUser){
       string=string.replace('__user__',foundUser.email)
+      .replace('__password__',foundUser.password)
     }else{
-      string=string.replace('__user__','错误信息')
+      string=string.replace('__user__','错误的用户信息')
+      .replace('__password__','不知道')
     }
     request.status=200 //????
     response.setHeader('Content-Type', 'text/html; charset=utf-8')
@@ -116,7 +128,7 @@ console.log(path,method)
     response.setHeader('Content-Type', 'text/html; charset=utf-8')
     response.write(string)
     response.end()
-  }else if(path==='/sign_in' && method==='POST'){
+  }else if(path==='/sign_in' && method==='POST'){  //用户登录
     readyBody(request).then((body)=>{
       let strings=body.split('&')
       let hash={}
@@ -141,7 +153,9 @@ console.log(path,method)
         }
       }
       if(found){
-        response.setHeader('Set-Cookie',`sign_in_email=${email};httpOnly`)
+        let sessionId=Math.random()*100000    //Math.random()可以产生一个随机小数
+        sessions[sessionId]={sign_in_email: email}
+        response.setHeader('Set-Cookie',`sessionId=${sessionId};httpOnly`)
         response.statusCode=200
       }else{
         response.statusCode=400
